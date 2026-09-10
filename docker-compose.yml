@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: journal_ai
+      POSTGRES_USER: journal
+      POSTGRES_PASSWORD: journal
+    ports:
+      - "5433:5432"
+    volumes:
+      - journal_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U journal -d journal_ai"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  journal_postgres_data:

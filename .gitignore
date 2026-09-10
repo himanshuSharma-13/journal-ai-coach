@@ -1,0 +1,12 @@
+.next
+node_modules
+.env
+.env.local
+backend/.venv
+backend/.env
+backend/journal.db
+.pytest_cache
+*.tsbuildinfo
+dist
+coverage
+*.log
