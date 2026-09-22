@@ -1,0 +1,12 @@
+journal_analytics:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: localhost
+      port: 5433
+      user: journal
+      password: journal
+      dbname: journal_ai
+      schema: analytics
+      threads: 2

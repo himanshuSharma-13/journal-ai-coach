@@ -11,14 +11,18 @@ docs/                     Product design and API/data contracts
 docker-compose.yml        Local Postgres infrastructure
 ```
 
-## MVP Scope
+## Product Capabilities
 
 The first release is intentionally small:
 
 - Write a free-form journal entry.
 - Save the original entry permanently in Postgres.
 - Browse the timeline and filter it by date.
-- Later, ask for a short text insight based on the entries you choose.
+- Create an account and keep journal data isolated per user.
+- Edit or permanently delete entries and all derived data.
+- Request a short evidence-backed insight for a date range.
+- Generate optional theme suggestions without requiring themes during writing.
+- Create retrieval-ready chunks and analytics events for future RAG and pipelines.
 
 Themes, mood/energy tracking, habits, dashboards, and automatic AI summaries are deferred until they demonstrate a clear product benefit. See [the product design](/Users/sharmindabadmash/Desktop/projs/journal_proj/docs/product-and-data-design.md) for the reasoning and future path.
 
@@ -41,6 +45,7 @@ Terminal 2: API
 cd /Users/sharmindabadmash/Desktop/projs/journal_proj/backend
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
+.venv/bin/alembic upgrade head
 .venv/bin/uvicorn app.main:app --reload
 ```
 
@@ -57,11 +62,33 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+## AI Credentials
+
+The app runs without an API key in `local-fallback` mode, which preserves the API flow and evidence display without calling a model. For real LLM insights, copy `backend/.env.example` to `backend/.env` and set `OPENAI_API_KEY`. The app uses the Responses API for insight generation and is prepared for `text-embedding-3-small` embeddings when the background indexing worker is enabled.
+
+## Data Engineering
+
+The `analytics/` directory contains a dbt project with:
+
+- Bronze application-event model
+- Silver cleaned journal-entry model
+- Gold weekly activity mart
+- Data-quality tests for keys, users, and dates
+
+Copy `analytics/profiles.yml.example` into your dbt profile location, then run `dbt run` and `dbt test`.
+
 ## Current Endpoints
 
 - `POST /api/v1/entries`
 - `GET /api/v1/entries?start=&end=&limit=&offset=`
 - `GET /health`
+- `POST /api/v1/auth/register`
+- `POST /api/v1/auth/login`
+- `PATCH /api/v1/entries/{id}`
+- `DELETE /api/v1/entries/{id}`
+- `POST /api/v1/entries/{id}/suggest-themes`
+- `POST /api/v1/entries/{id}/embed`
+- `POST /api/v1/insights`
 
 The exact request contract is in [data-contract.md](/Users/sharmindabadmash/Desktop/projs/journal_proj/docs/data-contract.md).
 
@@ -71,11 +98,11 @@ The exact request contract is in [data-contract.md](/Users/sharmindabadmash/Desk
 | --- | --- | --- |
 | 0 | Product direction and stable free-form entry contract | Complete |
 | 1 | Next.js entry form, FastAPI API, Postgres model, date-filtered timeline | Complete and running locally |
-| 2 | Edit/delete entries, basic product accounts, and production migrations | Not started |
-| 3 | User-requested simple-text insights for a chosen time range | Not started |
-| 4 | RAG retrieval over historical entries with cited excerpts | Not started |
-| 5 | Optional AI theme suggestions and comparisons across time | Not started |
-| 6 | Optional analytics, data pipelines, and dashboards | Not started |
+| 2 | Edit/delete entries, product accounts, and Alembic migration scaffold | Complete |
+| 3 | User-requested simple-text insights for a chosen time range | Complete with API-key placeholder and local fallback |
+| 4 | RAG retrieval-ready chunks, pgvector storage, and cited excerpts | Complete foundation; background embedding indexing awaits API key |
+| 5 | Optional theme suggestions and comparisons across time | Theme suggestions complete; comparisons remain a future enhancement |
+| 6 | dbt Bronze/Silver/Gold analytics layer and data-quality tests | Complete foundation |
 
 ## Verify
 

@@ -2,118 +2,81 @@
 
 import { FormEvent, useEffect, useState } from "react";
 
-type JournalEntry = {
-  id: string;
-  content: string;
-  occurred_at: string;
-  source: string;
-  created_at: string;
-};
-
-type EntryPage = { items: JournalEntry[]; total: number };
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+type Theme = { theme: string; confidence: number; source: string };
+type Entry = { id: string; content: string; occurred_at: string; themes: Theme[] };
+type Insight = { id: string; question: string; answer: string; evidence: { entry_id: string; occurred_at: string; excerpt: string }[]; provider: string; created_at: string };
 
-function toLocalInputValue(date = new Date()) {
-  const offset = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+function localDate(date = new Date()) {
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
 }
 
 export function JournalWorkspace() {
-  const [entries, setEntries] = useState<JournalEntry[]>([]);
-  const [total, setTotal] = useState(0);
+  const [token, setToken] = useState("");
+  const [mode, setMode] = useState<"login" | "register">("register");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [entries, setEntries] = useState<Entry[]>([]);
+  const [content, setContent] = useState("");
+  const [occurredAt, setOccurredAt] = useState(localDate());
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
-  const [content, setContent] = useState("");
-  const [occurredAt, setOccurredAt] = useState(toLocalInputValue());
-  const [status, setStatus] = useState<"idle" | "loading" | "saving" | "error">("loading");
+  const [question, setQuestion] = useState("What patterns do you notice in this period?");
+  const [insights, setInsights] = useState<Insight[]>([]);
   const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  async function loadEntries() {
-    setStatus("loading");
-    setMessage("");
+  const request = async (path: string, options: RequestInit = {}) => {
+    const response = await fetch(`${apiUrl}${path}`, { ...options, headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}), ...options.headers } });
+    if (!response.ok) { const body = await response.json().catch(() => ({})); throw new Error(body.detail || "Something went wrong."); }
+    return response.status === 204 ? null : response.json();
+  };
+
+  const load = async () => {
+    if (!token) return;
     const params = new URLSearchParams();
     if (start) params.set("start", new Date(`${start}T00:00:00`).toISOString());
     if (end) params.set("end", new Date(`${end}T23:59:59`).toISOString());
+    const [entryPage, insightList] = await Promise.all([request(`/api/v1/entries?${params}`), request("/api/v1/insights")]);
+    setEntries(entryPage.items); setInsights(insightList);
+  };
 
+  useEffect(() => { setToken(localStorage.getItem("journal_token") ?? ""); }, []);
+  useEffect(() => { load().catch((error) => setMessage(error.message)); }, [token, start, end]);
+
+  async function authenticate(event: FormEvent) {
+    event.preventDefault(); setBusy(true); setMessage("");
     try {
-      const response = await fetch(`${apiUrl}/api/v1/entries?${params.toString()}`);
-      if (!response.ok) throw new Error("Could not load journal entries.");
-      const page: EntryPage = await response.json();
-      setEntries(page.items);
-      setTotal(page.total);
-      setStatus("idle");
-    } catch {
-      setStatus("error");
-      setMessage(`Could not reach the API at ${apiUrl}. Start the FastAPI backend, then refresh.`);
-    }
+      const data = await request(`/api/v1/auth/${mode}`, { method: "POST", body: JSON.stringify({ email, password }) });
+      localStorage.setItem("journal_token", data.access_token); setToken(data.access_token); setPassword("");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to continue."); }
+    finally { setBusy(false); }
   }
 
-  useEffect(() => {
-    void loadEntries();
-  }, [start, end]);
-
-  async function saveEntry(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setStatus("saving");
-    setMessage("");
-    try {
-      const response = await fetch(`${apiUrl}/api/v1/entries`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          content,
-          occurred_at: new Date(occurredAt).toISOString(),
-          source: "manual"
-        })
-      });
-      if (!response.ok) {
-        const detail = await response.json();
-        throw new Error(detail.detail?.[0]?.msg ?? "Your entry could not be saved.");
-      }
-      setContent("");
-      setOccurredAt(toLocalInputValue());
-      setMessage("Entry saved. It is now part of your long-term journal history.");
-      await loadEntries();
-    } catch (error) {
-      setStatus("error");
-      setMessage(error instanceof Error ? error.message : "Your entry could not be saved.");
-    }
+  async function saveEntry(event: FormEvent) {
+    event.preventDefault(); setBusy(true); setMessage("");
+    try { await request("/api/v1/entries", { method: "POST", body: JSON.stringify({ content, occurred_at: new Date(occurredAt).toISOString() }) }); setContent(""); setOccurredAt(localDate()); await load(); }
+    catch (error) { setMessage(error instanceof Error ? error.message : "Unable to save."); }
+    finally { setBusy(false); }
   }
 
-  return (
-    <main className="page-shell">
-      <section className="hero">
-        <p className="eyebrow">Journal Foundation</p>
-        <h1>Keep the whole story.</h1>
-        <p className="hero-copy">A simple, private place to write freely today and understand your patterns only when you choose to ask later.</p>
-      </section>
+  async function editEntry(entry: Entry) {
+    const next = window.prompt("Edit your entry", entry.content); if (!next || next === entry.content) return;
+    try { await request(`/api/v1/entries/${entry.id}`, { method: "PATCH", body: JSON.stringify({ content: next }) }); await load(); } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to edit."); }
+  }
+  async function removeEntry(id: string) {
+    if (!window.confirm("Permanently delete this entry and its derived context?")) return;
+    try { await request(`/api/v1/entries/${id}`, { method: "DELETE" }); await load(); } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to delete."); }
+  }
+  async function suggestThemes(id: string) { try { await request(`/api/v1/entries/${id}/suggest-themes`, { method: "POST" }); await load(); } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to suggest themes."); } }
+  async function createInsight(event: { preventDefault: () => void }) {
+    event.preventDefault(); setBusy(true); setMessage("");
+    try { await request("/api/v1/insights", { method: "POST", body: JSON.stringify({ question, period_start: new Date(`${start || "2020-01-01"}T00:00:00`).toISOString(), period_end: new Date(`${end || new Date().toISOString().slice(0, 10)}T23:59:59`).toISOString() }) }); await load(); }
+    catch (error) { setMessage(error instanceof Error ? error.message : "Unable to create insight."); }
+    finally { setBusy(false); }
+  }
 
-      <section className="workspace-grid">
-        <form className="panel entry-form" onSubmit={saveEntry}>
-          <div className="section-heading"><p className="panel-label">New Entry</p><span>Free-form writing</span></div>
-          <label>
-            What is on your mind?
-            <textarea value={content} onChange={(event) => setContent(event.target.value)} minLength={20} maxLength={20000} required placeholder="Write freely. Your original words stay your source of truth." rows={12} />
-          </label>
-          <label>
-            When did this happen?
-            <input type="datetime-local" value={occurredAt} onChange={(event) => setOccurredAt(event.target.value)} required />
-          </label>
-          <button className="button-primary" disabled={status === "saving"}>{status === "saving" ? "Saving..." : "Save entry"}</button>
-          {message && <p className={`form-message ${status === "error" ? "error" : ""}`}>{message}</p>}
-        </form>
+  if (!token) return <main className="page-shell auth-shell"><section className="hero"><p className="eyebrow">Long-term journal intelligence</p><h1>Keep the whole story.</h1><p className="hero-copy">Write freely today. Ask for grounded reflections when you are ready.</p></section><form className="panel auth-form" onSubmit={authenticate}><p className="panel-label">{mode === "register" ? "Create your space" : "Welcome back"}</p><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" required /><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password (8+ characters)" minLength={8} required /><button className="button-primary" disabled={busy}>{busy ? "Working..." : mode === "register" ? "Create account" : "Sign in"}</button><button type="button" className="text-button" onClick={() => setMode(mode === "register" ? "login" : "register")}>{mode === "register" ? "Already have an account? Sign in" : "New here? Create an account"}</button>{message && <p className="form-message error">{message}</p>}</form></main>;
 
-        <section className="panel timeline-panel">
-          <div className="section-heading"><div><p className="panel-label">Journal Timeline</p><h2>{total} entries in your record</h2></div></div>
-          <div className="filter-row"><input aria-label="Start date" type="date" value={start} onChange={(event) => setStart(event.target.value)} /><input aria-label="End date" type="date" value={end} onChange={(event) => setEnd(event.target.value)} /></div>
-          <div className="entries-list">
-            {status === "loading" && <p className="empty-state">Loading your journal history...</p>}
-            {status === "error" && <p className="empty-state error">{message}</p>}
-            {status === "idle" && entries.length === 0 && <p className="empty-state">Your first entry will appear here.</p>}
-            {entries.map((entry) => <article className="entry-card" key={entry.id}><div className="entry-meta"><time dateTime={entry.occurred_at}>{new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(entry.occurred_at))}</time></div><p>{entry.content}</p></article>)}
-          </div>
-        </section>
-      </section>
-    </main>
-  );
+  return <main className="page-shell"><section className="hero compact"><div><p className="eyebrow">Your private record</p><h1>Keep the whole story.</h1></div><button className="button-secondary" onClick={() => { localStorage.removeItem("journal_token"); setToken(""); }}>Sign out</button></section><section className="workspace-grid"><form className="panel entry-form" onSubmit={saveEntry}><div className="section-heading"><p className="panel-label">New Entry</p><span>Free-form writing</span></div><textarea value={content} onChange={(e) => setContent(e.target.value)} minLength={20} required rows={10} placeholder="What is on your mind?" /><input type="datetime-local" value={occurredAt} onChange={(e) => setOccurredAt(e.target.value)} required /><button className="button-primary" disabled={busy}>Save entry</button>{message && <p className="form-message error">{message}</p>}<div className="insight-box"><p className="panel-label">Ask for insight</p><textarea value={question} onChange={(e) => setQuestion(e.target.value)} rows={3} /><button type="button" className="button-secondary" onClick={createInsight} disabled={busy}>Reflect on this period</button></div></form><section className="panel timeline-panel"><div className="section-heading"><div><p className="panel-label">Journal Timeline</p><h2>{entries.length} entries shown</h2></div></div><div className="filter-row"><input type="date" value={start} onChange={(e) => setStart(e.target.value)} /><input type="date" value={end} onChange={(e) => setEnd(e.target.value)} /></div><div className="entries-list">{entries.map((entry) => <article className="entry-card" key={entry.id}><div className="entry-meta"><time>{new Date(entry.occurred_at).toLocaleDateString()}</time><span>{entry.themes.map((theme) => theme.theme).join(" · ")}</span></div><p>{entry.content}</p><div className="card-actions"><button type="button" className="text-button" onClick={() => editEntry(entry)}>Edit</button><button type="button" className="text-button" onClick={() => suggestThemes(entry.id)}>Suggest themes</button><button type="button" className="text-button danger" onClick={() => removeEntry(entry.id)}>Delete</button></div></article>)}</div></section></section><section className="panel insight-results"><p className="panel-label">Reflections</p>{insights.map((insight) => <article className="insight-card" key={insight.id}><p>{insight.answer}</p><small>{insight.provider} · {new Date(insight.created_at).toLocaleDateString()}</small><details><summary>Evidence ({insight.evidence.length})</summary>{insight.evidence.map((item) => <p key={item.entry_id}>{new Date(item.occurred_at).toLocaleDateString()}: {item.excerpt}</p>)}</details></article>)}</section></main>;
 }

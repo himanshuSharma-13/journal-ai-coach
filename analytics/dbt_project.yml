@@ -1,0 +1,10 @@
+name: journal_analytics
+version: 1.0.0
+config-version: 2
+profile: journal_analytics
+model-paths: [models]
+models:
+  journal_analytics:
+    bronze: {+materialized: view}
+    silver: {+materialized: view}
+    gold: {+materialized: table}

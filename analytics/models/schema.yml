@@ -1,0 +1,16 @@
+version: 2
+models:
+  - name: stg_entries
+    columns:
+      - name: entry_id
+        tests: [not_null, unique]
+      - name: user_id
+        tests: [not_null]
+      - name: entry_date
+        tests: [not_null]
+  - name: mart_entry_activity_weekly
+    columns:
+      - name: user_id
+        tests: [not_null]
+      - name: week_start
+        tests: [not_null]

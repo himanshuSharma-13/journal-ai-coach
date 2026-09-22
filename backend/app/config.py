@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -6,6 +7,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://journal:journal@localhost:5433/journal_ai"
     cors_origins: str = "http://localhost:3000"
+    jwt_secret: str = "development-only-secret-change-me"
+    jwt_algorithm: str = "HS256"
+    openai_api_key: Optional[str] = None
+    openai_insight_model: str = "gpt-6-astra"
+    openai_embedding_model: str = "text-embedding-3-small"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
