@@ -13,18 +13,18 @@ docker-compose.yml        Local Postgres infrastructure
 
 ## Product Capabilities
 
-The first release is intentionally small:
+The current local prototype supports:
 
 - Write a free-form journal entry.
 - Save the original entry permanently in Postgres.
 - Browse the timeline and filter it by date.
 - Create an account and keep journal data isolated per user.
-- Edit or permanently delete entries and all derived data.
+- Edit or delete entries and their chunks and theme suggestions.
 - Request a short evidence-backed insight for a date range.
 - Generate optional theme suggestions without requiring themes during writing.
-- Create retrieval-ready chunks and analytics events for future RAG and pipelines.
+- Create text chunks and analytics events for future RAG and pipelines.
 
-Themes, mood/energy tracking, habits, dashboards, and automatic AI summaries are deferred until they demonstrate a clear product benefit. See [the product design](/Users/sharmindabadmash/Desktop/projs/journal_proj/docs/product-and-data-design.md) for the reasoning and future path.
+Themes are suggested on request; mood/energy tracking, habits, dashboards, and automatic AI summaries are deferred. See [the product design](docs/product-and-data-design.md) and [the current checkpoint](docs/checkpoint-2026-09-23.md).
 
 ## Run Locally
 
@@ -33,7 +33,7 @@ You need Docker Desktop running for Postgres.
 Terminal 1: database
 
 ```bash
-cd /Users/sharmindabadmash/Desktop/projs/journal_proj
+cd /Users/sharmindabadmash/Documents/projs/journal_proj
 docker compose up -d postgres
 ```
 
@@ -42,10 +42,9 @@ This project maps Postgres to local port `5433` so it can coexist with another p
 Terminal 2: API
 
 ```bash
-cd /Users/sharmindabadmash/Desktop/projs/journal_proj/backend
+cd /Users/sharmindabadmash/Documents/projs/journal_proj/backend
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-.venv/bin/alembic upgrade head
 .venv/bin/uvicorn app.main:app --reload
 ```
 
@@ -54,7 +53,7 @@ FastAPI documentation: [http://localhost:8000/docs](http://localhost:8000/docs)
 Terminal 3: frontend
 
 ```bash
-cd /Users/sharmindabadmash/Desktop/projs/journal_proj/frontend
+cd /Users/sharmindabadmash/Documents/projs/journal_proj/frontend
 npm install
 cp .env.example .env.local
 npm run dev
@@ -64,7 +63,7 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## AI Credentials
 
-The app runs without an API key in `local-fallback` mode, which preserves the API flow and evidence display without calling a model. For real LLM insights, copy `backend/.env.example` to `backend/.env` and set `OPENAI_API_KEY`. The app uses the Responses API for insight generation and is prepared for `text-embedding-3-small` embeddings when the background indexing worker is enabled.
+The app runs without an API key in `local-fallback` mode. This returns entry counts and evidence, not an AI interpretation. For model-generated insights, copy `backend/.env.example` to `backend/.env` and set `OPENAI_API_KEY`. The embedding endpoint is manual; automatic indexing and a background worker are not implemented. Model-backed insight and vector retrieval still need live verification with a key.
 
 ## Data Engineering
 
@@ -75,7 +74,7 @@ The `analytics/` directory contains a dbt project with:
 - Gold weekly activity mart
 - Data-quality tests for keys, users, and dates
 
-Copy `analytics/profiles.yml.example` into your dbt profile location, then run `dbt run` and `dbt test`.
+These models and tests are present but have not been run with dbt yet. See [the checkpoint](docs/checkpoint-2026-09-23.md) before using them as product analytics.
 
 ## Current Endpoints
 
@@ -90,27 +89,27 @@ Copy `analytics/profiles.yml.example` into your dbt profile location, then run `
 - `POST /api/v1/entries/{id}/embed`
 - `POST /api/v1/insights`
 
-The exact request contract is in [data-contract.md](/Users/sharmindabadmash/Desktop/projs/journal_proj/docs/data-contract.md).
+The original entry contract is in [data-contract.md](docs/data-contract.md); the newer auth and insight endpoints are described by FastAPI at `/docs`.
 
 ## Project Phases
 
 | Phase | Outcome | Status |
 | --- | --- | --- |
-| 0 | Product direction and stable free-form entry contract | Complete |
-| 1 | Next.js entry form, FastAPI API, Postgres model, date-filtered timeline | Complete and running locally |
-| 2 | Edit/delete entries, product accounts, and Alembic migration scaffold | Complete |
-| 3 | User-requested simple-text insights for a chosen time range | Complete with API-key placeholder and local fallback |
-| 4 | RAG retrieval-ready chunks, pgvector storage, and cited excerpts | Complete foundation; background embedding indexing awaits API key |
-| 5 | Optional theme suggestions and comparisons across time | Theme suggestions complete; comparisons remain a future enhancement |
-| 6 | dbt Bronze/Silver/Gold analytics layer and data-quality tests | Complete foundation |
+| 0 | Product direction and free-form entry contract | Documented |
+| 1 | Journal entry API, form, date-filtered timeline | Implemented and locally exercised |
+| 2 | Accounts, edit/delete, versioned migrations | API and UI implemented; migration path needs repair and testing |
+| 3 | User-requested text insights | Local fallback exercised; model path unverified |
+| 4 | RAG | Chunk storage, manual embedding endpoint, vector query code; indexing and model path incomplete |
+| 5 | Theme suggestions and comparisons | Rule-based suggestions present; comparisons not built |
+| 6 | Analytics | dbt models and tests drafted; dbt run not verified |
 
 ## Verify
 
 ```bash
-cd /Users/sharmindabadmash/Desktop/projs/journal_proj/backend
+cd /Users/sharmindabadmash/Documents/projs/journal_proj/backend
 .venv/bin/python -m pytest -q
 
-cd /Users/sharmindabadmash/Desktop/projs/journal_proj/frontend
+cd /Users/sharmindabadmash/Documents/projs/journal_proj/frontend
 npm run typecheck
 npm run build
 ```
