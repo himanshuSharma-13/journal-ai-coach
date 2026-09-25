@@ -45,24 +45,31 @@ def create_embeddings(chunks: list[str]) -> Optional[list[list[float]]]:
 
 
 def generate_insight(question: str, entries: list[JournalEntry]) -> tuple[str, str, Optional[str]]:
-    evidence = "\n\n".join(f"[{entry.occurred_at.date()}] {entry.content}" for entry in entries)
     settings = get_settings()
-    if settings.openai_api_key:
-        client = OpenAI(api_key=settings.openai_api_key)
+    if not entries:
+        return "There are no entries in this period yet, so I cannot identify a grounded pattern.", "local-fallback", None
+    evidence = "\n\n".join(f"[{entry.occurred_at.date()}] {entry.content}" for entry in entries)
+    if settings.groq_api_key:
+        client = OpenAI(api_key=settings.groq_api_key, base_url="https://api.groq.com/openai/v1")
         response = client.responses.create(
-            model=settings.openai_insight_model,
-            store=False,
+            model=settings.groq_insight_model,
             instructions=(
-                "Answer only from the journal evidence. Be concise, reflective, and explicit when evidence is weak. "
-                "Do not diagnose or invent events. End with 2-4 dated evidence references."
+                "Answer the question using only the journal evidence. Write concise Markdown: begin with a direct "
+                "1-2 sentence answer, then a '### What I noticed' section with up to three short bullets, "
+                "and a '### Next step' section with one practical suggestion about the activities described, "
+                "only if the evidence supports one. "
+                "Put an evidence date next to each observation. If evidence is weak, say so clearly. "
+                "Do not invent events, diagnoses, scores, percentages, or trends. Do not make tables, "
+                "ASCII charts, or code blocks. If asked for a graph, explain that these free-form entries "
+                "are not numerical data and give a short dated qualitative timeline instead. "
+                "Do not suggest changing the journal format or adding ratings, scores, hours, counts, "
+                "or other tracking fields."
             ),
             input=f"Question: {question}\n\nJournal evidence:\n{evidence}",
         )
-        return response.output_text, "openai", settings.openai_insight_model
-    if not entries:
-        return "There are no entries in this period yet, so I cannot identify a grounded pattern.", "local-fallback", None
+        return response.output_text, "groq", settings.groq_insight_model
     return (
-        f"You recorded {len(entries)} entries in this period. A full AI reflection will be available after OPENAI_API_KEY is configured. "
+        f"You recorded {len(entries)} entries in this period. A full AI reflection will be available after GROQ_API_KEY is configured. "
         f"For now, review the dated excerpts below as the evidence for your question: {question}",
         "local-fallback",
         None,

@@ -63,7 +63,7 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## AI Credentials
 
-The app runs without an API key in `local-fallback` mode. This returns entry counts and evidence, not an AI interpretation. For model-generated insights, copy `backend/.env.example` to `backend/.env` and set `OPENAI_API_KEY`. The embedding endpoint is manual; automatic indexing and a background worker are not implemented. Model-backed insight and vector retrieval still need live verification with a key.
+The app runs without an API key in `local-fallback` mode. This returns entry counts and evidence, not an AI interpretation. For model-generated insights, copy `backend/.env.example` to `backend/.env` and set `GROQ_API_KEY`. The backend uses Groq's Responses API for requested reflections and selects up to 30 entries from the chosen date range. The optional `/embed` endpoint still requires a separate `OPENAI_API_KEY`; embeddings are not used by the current insight flow. Automatic indexing and long-term retrieval are not implemented yet. Keep keys in the backend `.env`, which Git ignores.
 
 ## Data Engineering
 
@@ -98,8 +98,8 @@ The original entry contract is in [data-contract.md](docs/data-contract.md); the
 | 0 | Product direction and free-form entry contract | Documented |
 | 1 | Journal entry API, form, date-filtered timeline | Implemented and locally exercised |
 | 2 | Accounts, edit/delete, versioned migrations | API and UI implemented; migration path needs repair and testing |
-| 3 | User-requested text insights | Local fallback exercised; model path unverified |
-| 4 | RAG | Chunk storage, manual embedding endpoint, vector query code; indexing and model path incomplete |
+| 3 | User-requested text insights | Groq model path and local fallback |
+| 4 | RAG | Chunk storage and optional manual embedding endpoint; vector retrieval is not part of the current insight flow |
 | 5 | Theme suggestions and comparisons | Rule-based suggestions present; comparisons not built |
 | 6 | Analytics | dbt models and tests drafted; dbt run not verified |
 
